@@ -1,0 +1,479 @@
+{% extends "base.html" %}
+{% load static %}
+{% block content %}
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+<style>
+    /* PAGE CONTAINER */
+
+    .live-track-page {
+        max-width: 1200px;
+        margin: auto;
+        padding: 30px 20px;
+
+        display: flex;
+        margin-top: 15px;
+        gap: 40px;
+        align-items: flex-start;
+    }
+
+    /* MAP BOX */
+
+    .live-map {
+        flex: 1;
+        background: white;
+        border-radius: 14px;
+        overflow: hidden;
+        box-shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+    }
+
+    /* MAP SIZE */
+
+    #map {
+        height: 420px;
+        width: 100%;
+        border-radius: 14px;
+    }
+
+    /* RIGHT PANEL */
+
+    .live-panel {
+        flex: 1;
+        background: #ffffff;
+        padding: 22px;
+        border-radius: 12px;
+        display: flex;
+        flex-direction: column;
+        gap: 14px;
+        border: 1px solid #e5e7eb;
+    }
+
+    /* TITLE */
+
+    .live-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #111827;
+    }
+
+    /* INFO BOX */
+
+    .live-info {
+        background: #f3f4f6;
+        padding: 12px 14px;
+        border-radius: 8px;
+        font-size: 14px;
+        line-height: 1.7;
+        color: #374151;
+    }
+
+    /* BUTTONS */
+
+    .start-nav {
+        padding: 10px;
+        border: none;
+        border-radius: 8px;
+        background: #2563eb;
+        color: white;
+        font-size: 14px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    .call-btn {
+        padding: 10px;
+        border-radius: 8px;
+        background: #16a34a;
+        color: white;
+        text-align: center;
+        font-size: 14px;
+        font-weight: 600;
+        text-decoration: none;
+    }
+
+    .leave-rescue {
+        padding: 9px;
+        border: none;
+        border-radius: 7px;
+        background: #ef4444;
+        color: white;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+    }
+
+    /* NAV BAR ON MAP */
+
+    .vehicle-popup {
+        position: fixed;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        background: white;
+        padding: 20px;
+        border-radius: 12px;
+        border: 1px solid #e5e7eb;
+        display: none;
+        /* important */
+        z-index: 9999;
+        text-align: center;
+        width: 220px;
+    }
+
+    .vehicle-popup h3 {
+        margin-bottom: 12px;
+        font-size: 16px;
+    }
+
+    .vehicle-popup button {
+        display: block;
+        width: 100%;
+        margin: 6px 0;
+        padding: 8px;
+        border: none;
+        border-radius: 6px;
+        background: #2563eb;
+        color: white;
+        font-size: 14px;
+        cursor: pointer;
+    }
+
+    #navBar {
+        position: absolute;
+        top: 5px;
+        left: 50%;
+        margin-top: 70px;
+        transform: translateX(-50%);
+        background: #065f46;
+        color: white;
+        padding: 12px 22px;
+        border-radius: 10px;
+        font-size: 16px;
+        font-weight: 600;
+        z-index: 999;
+        display: none;
+    }
+</style>
+
+
+<div class="live-track-page">
+
+    <div class="live-map">
+
+        <div id="map"></div>
+
+        <div id="navBar">⬆ Continue Straight</div>
+
+    </div>
+
+
+    <div class="live-panel">
+
+        <div>
+
+            <div class="live-title">
+                🚑 Helping <b id="victimName">Loading...</b>
+            </div>
+
+            <div class="live-info">
+
+                <div id="instruction">Fetching route...</div>
+
+                <div>📍 Distance : <b id="remaining">--</b></div>
+
+                <div>⏱ ETA : <b id="eta">--</b></div>
+
+            </div>
+
+            <button onclick="startNavigation()" class="start-nav">
+                🧭 Start Navigation
+            </button>
+
+        </div>
+
+        <div>
+
+            <a href="tel:{{victim_phone}}" class="call-btn">
+                📞 Call Victim
+            </a>
+
+            <button class="leave-rescue" onclick="leaveRescue()">
+                🚪 Leave Rescue
+            </button>
+
+        </div>
+
+    </div>
+
+</div>
+
+
+<!-- VEHICLE POPUP -->
+
+<div id="vehiclePopup" class="vehicle-popup">
+
+    <h3>Select Vehicle</h3>
+
+    <button onclick="selectVehicle('bike')">🏍 Bike</button>
+    <button onclick="selectVehicle('car')">🚗 Car</button>
+    <button onclick="selectVehicle('walk')">🚶 Walking</button>
+
+</div>
+
+
+<script>
+
+    let map
+    let helperMarker
+    let victimMarker
+    let routeLine
+    let vehicle = "bike"
+
+    let navigationMode = false
+    let firstLoad = true
+
+    let lastHelper = null
+    let lastVictim = null
+
+    let vehicleSpeeds = {
+        bike: 40,
+        car: 35,
+        walk: 5
+    }
+
+    function initMap(lat, lng) {
+
+        map = L.map('map', { zoomControl: true }).setView([lat, lng], 17)
+
+        L.tileLayer(
+            'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+            { maxZoom: 19 }
+        ).addTo(map)
+
+    }
+
+    function updateMap() {
+
+        fetch("/get-live-locations/")
+            .then(res => res.json())
+            .then(data => {
+
+                let helper = [data.helper.latitude, data.helper.longitude]
+                let victim = [data.victim.latitude, data.victim.longitude]
+
+                document.getElementById("victimName").innerText = data.victim.name
+
+                if (!map) {
+                    initMap(helper[0], helper[1])
+                }
+
+                if (!helperMarker) {
+
+                    helperMarker = L.marker(helper, {
+                        icon: L.icon({
+                            iconUrl: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+                            iconSize: [32, 32]
+                        })
+                    }).addTo(map)
+
+                } else {
+                    helperMarker.setLatLng(helper)
+                }
+
+                if (!victimMarker) {
+
+                    victimMarker = L.marker(victim, {
+                        icon: L.icon({
+                            iconUrl: "https://maps.google.com/mapfiles/ms/icons/red-dot.png",
+                            iconSize: [32, 32]
+                        })
+                    }).addTo(map)
+
+                } else {
+                    victimMarker.setLatLng(victim)
+                }
+
+                /* ROUTE DRAW ONLY IF LOCATION CHANGED */
+
+                if (
+                    !lastHelper ||
+                    helper[0] !== lastHelper[0] ||
+                    helper[1] !== lastHelper[1] ||
+                    victim[0] !== lastVictim[0] ||
+                    victim[1] !== lastVictim[1]
+                ) {
+                    drawRoute(helper, victim)
+                }
+
+                lastHelper = helper
+                lastVictim = victim
+
+            })
+
+    }
+
+    function drawRoute(start, end) {
+
+        let profile = "driving"
+
+        if (vehicle == "walk") {
+            profile = "foot"
+        }
+        else if (vehicle == "bike") {
+            profile = "cycling"
+        }
+
+        let url = `https://router.project-osrm.org/route/v1/${profile}/${start[1]},${start[0]};${end[1]},${end[0]}?overview=full&geometries=geojson&steps=true`
+
+        fetch(url)
+            .then(res => res.json())
+            .then(data => {
+
+                if (!data.routes || data.routes.length == 0) {
+                    return
+                }
+
+                let route = data.routes[0]
+
+                let coords = route.geometry.coordinates
+
+                let latlngs = coords.map(c => [c[1], c[0]])
+
+                if (routeLine) {
+                    map.removeLayer(routeLine)
+                }
+
+                routeLine = L.polyline(latlngs, {
+                    color: "#2563eb",
+                    weight: 5
+                }).addTo(map)
+
+                let distance = route.legs[0].distance / 1000
+
+                let speed = vehicleSpeeds[vehicle]
+
+                let eta = Math.round((distance / speed) * 60)
+
+                document.getElementById("remaining").innerText =
+                    distance.toFixed(2) + " km"
+
+                document.getElementById("eta").innerText =
+                    eta + " mins"
+
+                if (navigationMode) {
+
+                    let instruction = "⬆ Continue Straight"
+
+                    let steps = route.legs[0].steps
+
+                    if (steps && steps.length > 0) {
+
+                        let step = steps[0]
+
+                        if (step.maneuver && step.maneuver.instruction) {
+                            instruction = step.maneuver.instruction
+                        }
+
+                    }
+
+                    document.getElementById("navBar").innerText = instruction
+
+                }
+
+                if (firstLoad) {
+
+                    map.fitBounds(routeLine.getBounds(), {
+                        padding: [50, 50]
+                    })
+
+                    firstLoad = false
+
+                }
+
+            })
+
+    }
+
+    function startNavigation() {
+
+        document.getElementById("vehiclePopup").style.display = "block"
+
+    }
+
+    function selectVehicle(type) {
+
+        vehicle = type
+
+        document.getElementById("vehiclePopup").style.display = "none"
+
+        navigationMode = true
+
+        document.getElementById("navBar").style.display = "block"
+
+        updateMap()
+
+    }
+
+    function leaveRescue() {
+
+        fetch("/leave-rescue/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCSRFToken()
+            }
+        })
+            .then(res => res.json())
+            .then(data => {
+                window.location.href = "/"
+            })
+
+    }
+
+    function getCSRFToken() {
+
+        let cookieValue = null
+
+        document.cookie.split(';').forEach(cookie => {
+
+            cookie = cookie.trim()
+
+            if (cookie.startsWith("csrftoken="))
+                cookieValue = cookie.substring(10)
+
+        })
+
+        return cookieValue
+
+    }
+
+    /* LIVE UPDATE */
+
+    setInterval(updateMap, 2000)
+
+    updateMap()
+
+    /* CHECK SAFE STATUS */
+
+    setInterval(() => {
+
+        fetch("/check-alert-status/")
+            .then(res => res.json())
+            .then(data => {
+
+                if (data.safe) {
+
+                    alert("✅ " + (data.victim || "Victim") + " is safe")
+
+                    window.location.href = "/"
+
+                }
+
+            })
+
+    }, 3000)
+
+</script>
+{% endblock %}

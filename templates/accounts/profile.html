@@ -1,0 +1,256 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+
+<div class="profile-page">
+
+    <!-- PROFILE HEADER -->
+    <div class="profile-header">
+        <h2>{{ request.user.username }}</h2>
+        <p>{{ request.user.email }}</p>
+    </div>
+
+    <!-- PROFILE PHOTO -->
+    <div class="profile-photo-box" style="text-align:center;margin-bottom:25px;">
+        <img src="{{ profile.profile_pic.url }}" class="profile-pic">
+        <br>
+        <button onclick="openProfilePopup()" class="edit-btn">✏ Edit Profile</button>
+    </div>
+
+    <!-- EDIT PROFILE POPUP -->
+    <div class="profile-popup" id="profilePopup">
+        <div class="profile-popup-content">
+            <span class="popup-close" onclick="closeProfilePopup()">×</span>
+            <h2>Edit Profile</h2>
+
+            <form id="profileForm" method="POST" enctype="multipart/form-data" action="{% url 'update_profile' %}">
+                {% csrf_token %}
+
+                <label>Name</label>
+<input type="text" name="username" id="usernameInput" value="{{ request.user.username }}" required onblur="checkUsername()">
+<small id="usernameError" style="color:red; display:none;"></small>
+
+                <label>Phone</label>
+                <input type="text" name="phone" value="{{ profile.phone|default:'' }}">
+
+                <label>Profile Photo</label>
+                <input type="file" name="profile_pic">
+
+                <label>Email</label>
+                <input type="email" name="email" id="emailInput"
+                       value="{{ request.user.email }}"
+                       oninput="emailChanged()">
+
+                <button type="button" id="sendOtpBtn" class="otp-btn" onclick="sendOTP()" style="display:none;">
+                    Send OTP
+                </button>
+
+                <div id="otpBox" style="display:none;">
+                    <label>Enter OTP</label>
+                    <input type="text" id="otpInput" placeholder="Enter OTP">
+                    <button type="button" class="verify-btn" onclick="verifyOTP()">Verify OTP</button>
+                </div>
+
+                <div class="popup-actions">
+                    <button type="submit" id="saveBtn" class="save-btn">Save</button>
+                    <button type="button" onclick="closeProfilePopup()" class="discard-btn">Cancel</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- PROFILE GRID -->
+    <div class="profile-grid">
+
+        <!-- EMERGENCY CONTACTS -->
+        <div class="profile-card">
+            <h3>📇 Emergency Contacts</h3>
+            {% if contacts %}
+                <ul>
+                    {% for c in contacts %}
+                    <li><b>{{ c.name }}</b> – {{ c.phone }}</li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="empty">No contacts added</p>
+            {% endif %}
+        </div>
+
+        <!-- CALL HISTORY -->
+        <div class="profile-card">
+            <h3>📞 Call History</h3>
+            {% if calls %}
+                <ul>
+                    {% for call in calls %}
+                    <li style="margin-bottom:12px;">
+                        <b>{{ call.name }}</b> – {{ call.phone }} <br>
+                        <small>{{ call.called_at|date:"d M Y H:i" }}</small>
+                        {% if call.latitude %}
+                        <br>
+                        📍 <a href="https://maps.google.com/?q={{call.latitude}},{{call.longitude}}" target="_blank">
+                            View Location
+                        </a>
+                        {% endif %}
+                    </li>
+                    {% endfor %}
+                </ul>
+            {% else %}
+                <p class="empty">No calls yet</p>
+            {% endif %}
+        </div>
+
+    </div>
+</div>
+
+<!-- ================= SCRIPT ================= -->
+<script>
+function openProfilePopup(){
+    document.getElementById("profilePopup").style.display="flex";
+}
+function closeProfilePopup(){
+    document.getElementById("profilePopup").style.display="none";
+}
+
+/* CSRF Token */
+function getCSRFToken(){
+    let cookieValue = null;
+    const cookies = document.cookie.split(';');
+    for(let c of cookies){
+        const cookie = c.trim();
+        if(cookie.startsWith('csrftoken=')){
+            cookieValue = cookie.substring(10);
+        }
+    }
+    return cookieValue;
+}
+
+let originalEmail = "{{ request.user.email }}";
+let otpVerified = true;
+
+/* Detect Email Change */
+function emailChanged(){
+    const email = document.getElementById("emailInput").value.trim();
+    const sendBtn = document.getElementById("sendOtpBtn");
+    const saveBtn = document.getElementById("saveBtn");
+
+    if(email !== originalEmail){
+        sendBtn.style.display = "block";
+        saveBtn.disabled = true;
+        otpVerified = false;
+        showToast("Please verify your new email", "error");
+    }else{
+        sendBtn.style.display = "none";
+        saveBtn.disabled = false;
+        otpVerified = true;
+    }
+}
+
+/* Send OTP */
+function sendOTP(){
+    const email = document.getElementById("emailInput").value;
+
+    fetch("/send-otp/",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json",
+            "X-CSRFToken": getCSRFToken()
+        },
+        body:JSON.stringify({email})
+    })
+    .then(res=>res.json())
+    .then(data=>{
+        if(data.status==="sent"){
+            document.getElementById("otpBox").style.display="block";
+            showToast("OTP sent successfully!", "success");
+        }
+    })
+}
+
+/* Verify OTP */
+function verifyOTP(){
+    const otp = document.getElementById("otpInput").value;
+    const email = document.getElementById("emailInput").value;
+
+    fetch("/verify-otp/",{
+        method:"POST",
+        headers:{
+            "Content-Type":"application/json",
+            "X-CSRFToken": getCSRFToken()
+        },
+        body:JSON.stringify({otp, email})
+    })
+    .then(res=>res.json())
+    .then(data=>{
+        if(data.status==="verified"){
+            otpVerified = true;
+            document.getElementById("saveBtn").disabled=false;
+            showToast("Email verified!", "success");
+        }else{
+            showToast("Invalid OTP!", "error");
+        }
+    })
+}
+
+/* Prevent Save Without OTP */
+document.getElementById("profileForm").addEventListener("submit", function(e){
+    const email = document.getElementById("emailInput").value.trim();
+    if(email !== originalEmail && !otpVerified){
+        e.preventDefault();
+        showToast("Verify your email before saving", "error");
+    }
+});
+let usernameValid = true;
+
+function checkUsername(){
+    const username = document.getElementById("usernameInput").value.trim();
+    const errorBox = document.getElementById("usernameError");
+    const saveBtn = document.getElementById("saveBtn");
+
+    if(username === "") return;
+
+    fetch(`/check-username/?username=${username}`)
+    .then(res => res.json())
+    .then(data => {
+        if(data.exists){
+            errorBox.innerText = "Username already exists!";
+            errorBox.style.display = "block";
+            usernameValid = false;
+            saveBtn.disabled = true;
+        }else{
+            errorBox.style.display = "none";
+            usernameValid = true;
+            saveBtn.disabled = false;
+        }
+    });
+}
+
+/* Toast System */
+function showToast(msg,type="success"){
+    const box = document.getElementById("toastBox") || createToastBox();
+    const toast = document.createElement("div");
+    toast.className = "toast " + type;
+    toast.innerText = msg;
+    box.appendChild(toast);
+    setTimeout(()=>toast.remove(),3000);
+}
+
+function createToastBox(){
+    const box = document.createElement("div");
+    box.id = "toastBox";
+    document.body.appendChild(box);
+    return box;
+}
+</script>
+
+{% if messages %}
+    {% for message in messages %}
+        <script>
+            showToast("{{ message|escapejs }}","{{ message.tags }}");
+            
+        </script>
+    {% endfor %}
+    
+{% endif %}
+
+{% endblock %}

@@ -1,0 +1,163 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+<div class="list-wrapper">
+
+<h1 class="list-title">🩸 Blood Donors Directory</h1>
+
+<!-- FILTER BAR -->
+
+<form method="get" class="donor-filters">
+
+<select name="group">
+<option value="">All Groups</option>
+
+<option value="A+" {% if selected_group == "A+" %}selected{% endif %}>A+</option>
+<option value="B+" {% if selected_group == "B+" %}selected{% endif %}>B+</option>
+<option value="O+" {% if selected_group == "O+" %}selected{% endif %}>O+</option>
+<option value="AB+" {% if selected_group == "AB+" %}selected{% endif %}>AB+</option>
+
+</select>
+
+<input type="text"
+name="place"
+placeholder="Search place..."
+value="{{ selected_place|default:'' }}">
+
+<button type="submit">Search</button>
+
+</form>
+
+
+<!-- DONOR TABLE -->
+
+<div class="donor-table">
+
+<div class="donor-row header">
+
+<div>Name</div>
+<div>Place</div>
+<div>Group</div>
+<div>Phone</div>
+<div>Action</div>
+
+</div>
+
+
+{% for donor in donors %}
+
+<div class="donor-row">
+
+<div>{{ donor.name }}</div>
+<div>{{ donor.place }}</div>
+<div>{{ donor.group }}</div>
+<div>{{ donor.phone }}</div>
+
+<div>
+<a href="tel:{{ donor.phone }}" class="call-btn">
+Call
+</a>
+</div>
+
+</div>
+
+{% empty %}
+
+<div style="padding:20px;text-align:center;color:#ccc;">
+No donors found
+</div>
+
+{% endfor %}
+
+</div>
+
+<br>
+
+<a href="{% url 'donor_register' %}" class="regbtn">
+➕ Register as Donor
+</a>
+
+</div>
+
+
+<script>
+
+/* THEME SYSTEM */
+
+function toggleTheme(){
+
+document.body.classList.toggle("light-theme")
+
+const themeBtn=document.querySelector(".theme-btn")
+
+if(document.body.classList.contains("light-theme")){
+
+themeBtn.innerText="🌞"
+localStorage.setItem("theme","light")
+
+}
+
+else{
+
+themeBtn.innerText="🌙"
+localStorage.setItem("theme","dark")
+
+}
+
+}
+
+
+/* LOAD SAVED THEME */
+
+(function(){
+
+if(localStorage.getItem("theme")==="light"){
+
+document.body.classList.add("light-theme")
+
+document.querySelector(".theme-btn").innerText="🌞"
+
+}
+
+})()
+
+
+/* TOAST */
+
+function showToast(msg,type="success"){
+
+const box=document.getElementById("toastBox")
+
+const t=document.createElement("div")
+
+t.className="toast "+type
+t.innerText=msg
+
+box.appendChild(t)
+
+setTimeout(()=>t.remove(),3000)
+
+}
+
+
+/* LOADER */
+
+function showLoader(){
+
+document.getElementById("loader").style.display="flex"
+
+}
+
+function hideLoader(){
+
+document.getElementById("loader").style.display="none"
+
+}
+
+</script>
+
+{% endblock %}

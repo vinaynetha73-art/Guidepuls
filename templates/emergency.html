@@ -1,0 +1,374 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+
+<div class="main-wrapper">
+<div class="app-card">
+
+<div class="app-header">
+<h1>🚨 GuidePuls Emergency</h1>
+<p>One tap can save a life</p>
+</div>
+
+<!-- 5 OPTIONS -->
+
+<a href="tel:108" class="emergency-btn btn-ambulance">🚑 Ambulance</a>
+<a href="tel:100" class="emergency-btn btn-police">👮 Police</a>
+
+
+<button onclick="sosCall()" class="emergency-btn btn-general">
+🚨 SOS 
+</button>
+<button onclick="toggleNumbers()" class="emergency-btn btn-numbers" style="color:black;">
+📟 Emergency Numbers
+</button>
+
+<button onclick="toggleSaved()" class="emergency-btn btn-saved" style="color:black;">
+📋 Saved Numbers
+</button>
+
+
+<!-- EMERGENCY NUMBERS -->
+
+<div id="numbersPanel" class="numbers-panel" style="display:none;">
+
+<h3>📟 Important Emergency Numbers</h3>
+
+<ul class="numbers-list">
+<li><a href="tel:108">🚑 108 – Ambulance</a></li>
+<li><a href="tel:100">👮 100 – Police</a></li>
+<li><a href="tel:112">🆘 112 – All-in-One Emergency</a></li>
+<li><a href="tel:1091">👩 1091 – Women Helpline</a></li>
+<li><a href="tel:1098">🧒 1098 – Child Helpline</a></li>
+</ul>
+
+</div>
+
+
+<!-- SAVED CONTACTS -->
+
+<div id="savedPanel" class="numbers-panel" style="display:none;">
+
+<div class="saved-header">
+<h3><i class="fa-solid fa-address-book"></i> Emergency Contacts</h3>
+
+<button onclick="showAddForm()" class="add-btn">
+<i class="fa-solid fa-plus"></i> Add Contact
+</button>
+
+</div>
+
+<div id="contactList" class="saved-list">
+
+<div class="empty-state">
+<i class="fa-solid fa-user-shield"></i>
+<p>No emergency contacts added yet</p>
+</div>
+
+</div>
+
+</div>
+
+
+<!-- CONTACT FORM -->
+
+<div id="contactFormBox" class="emergency-contact-box" style="display:none;">
+
+<h3 id="formTitle">Add Contact</h3>
+
+<input type="text" id="contactName" placeholder="Contact Name">
+<input type="text" id="contactPhone" placeholder="Phone Number">
+
+<div class="form-actions">
+
+<button onclick="saveContact()" class="icon-btn save">
+<i class="fa-solid fa-floppy-disk"></i>
+</button>
+
+<button onclick="cancelForm()" class="icon-btn cancel">
+<i class="fa-solid fa-xmark"></i>
+</button>
+
+</div>
+
+</div>
+
+<div class="app-footer">
+Stay calm • Act fast • Help is here
+</div>
+
+</div>
+</div>
+
+
+<script>
+
+let contacts=[]
+let activeIndex=null
+let editIndex=null
+
+
+/* CSRF */
+
+function getCSRFToken(){
+
+let cookieValue=null
+
+const cookies=document.cookie.split(';')
+
+for(let c of cookies){
+
+const cookie=c.trim()
+
+if(cookie.startsWith('csrftoken=')){
+cookieValue=cookie.substring(10)
+}
+
+}
+
+return cookieValue
+
+}
+
+
+/* LOAD CONTACTS */
+
+document.addEventListener("DOMContentLoaded",()=>{
+fetchContacts()
+})
+
+
+function fetchContacts(){
+
+fetch('/get-contacts/')
+.then(res=>res.json())
+.then(data=>{
+contacts=data
+renderContacts()
+})
+
+}
+
+
+/* PANEL TOGGLE */
+
+function togglePanel(panelId){
+
+const panel=document.getElementById(panelId)
+
+const panels=["numbersPanel","savedPanel","contactFormBox"]
+
+if(panel.style.display==="block"){
+
+panel.style.display="none"
+return
+
+}
+
+panels.forEach(id=>{
+
+const p=document.getElementById(id)
+
+if(p) p.style.display="none"
+
+})
+
+panel.style.display="block"
+
+}
+
+function toggleNumbers(){
+togglePanel("numbersPanel")
+}
+
+function toggleSaved(){
+togglePanel("savedPanel")
+renderContacts()
+}
+
+
+/* SOS */
+
+function sosCall(){
+
+if(!navigator.geolocation){
+alert("Location not supported")
+return
+}
+
+navigator.geolocation.getCurrentPosition(function(position){
+
+let lat = position.coords.latitude
+let lon = position.coords.longitude
+
+let locationLink = "https://maps.google.com/?q="+lat+","+lon
+
+let phone = "9876543210"   // emergency contact
+
+/* OPEN CALL */
+
+window.location.href = "tel:"+phone
+
+/* AFTER 2 SEC OPEN SMS */
+
+setTimeout(()=>{
+
+let message = encodeURIComponent(
+"🚨 Emergency! I need help.\nMy location:\n"+locationLink
+)
+
+window.location.href = "sms:"+phone+"?body="+message
+
+},2000)
+
+})
+
+}
+
+/* FORM */
+
+function showAddForm(){
+
+editIndex=null
+
+document.getElementById("formTitle").innerText="Add Contact"
+
+document.getElementById("contactName").value=""
+document.getElementById("contactPhone").value=""
+
+togglePanel("contactFormBox")
+
+}
+
+function cancelForm(){
+
+document.getElementById("contactFormBox").style.display="none"
+
+}
+
+
+/* SAVE CONTACT */
+
+function saveContact(){
+
+const name=document.getElementById("contactName").value.trim()
+
+const phone=document.getElementById("contactPhone").value.trim()
+
+if(!name || !phone){
+
+alert("Enter name and phone number")
+return
+
+}
+
+fetch('/save-contact/',{
+
+method:"POST",
+
+headers:{
+"Content-Type":"application/json",
+"X-CSRFToken":getCSRFToken()
+},
+
+body:JSON.stringify({name,phone})
+
+})
+
+.then(res=>res.json())
+.then(data=>{
+
+document.getElementById("contactFormBox").style.display="none"
+
+fetchContacts()
+
+})
+
+}
+
+
+/* RENDER CONTACTS */
+
+function renderContacts(){
+
+const box=document.getElementById("contactList")
+
+if(!box) return
+
+box.innerHTML=""
+
+if(contacts.length===0){
+
+box.innerHTML="<p>No contacts saved.</p>"
+
+return
+
+}
+
+contacts.forEach((c,i)=>{
+
+const div=document.createElement("div")
+
+div.className="contact-item"+(i===activeIndex?" active":"")
+
+div.innerHTML=`
+<div>
+<b>${c.name}</b><br>
+<small>${c.phone}</small>
+</div>
+
+<div class="contact-actions">
+
+<button class="icon-btn call" onclick="callNow(${i})">
+<i class="fa-solid fa-phone"></i>
+</button>
+
+<button class="icon-btn select" onclick="setActive(${i})">
+<i class="fa-solid fa-star"></i>
+</button>
+
+<button class="icon-btn delete" onclick="deleteContact(${i})">
+<i class="fa-solid fa-trash"></i>
+</button>
+
+</div>
+`
+
+box.appendChild(div)
+
+})
+
+}
+
+
+function callNow(i){
+window.location.href="tel:"+contacts[i].phone
+}
+
+function setActive(i){
+activeIndex=i
+renderContacts()
+}
+
+function deleteContact(i){
+
+if(!confirm("Delete this contact?")) return
+
+fetch(`/delete-contact/${contacts[i].id}/`,{
+method:"POST",
+headers:{
+"X-CSRFToken":getCSRFToken()
+}
+}).then(()=>{
+fetchContacts()
+})
+
+}
+
+</script>
+
+{% endblock %}

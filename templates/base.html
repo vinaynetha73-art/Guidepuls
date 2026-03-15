@@ -1,0 +1,338 @@
+{% load static %}
+<!DOCTYPE html>
+<html>
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SEARS</title>
+
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    <link rel="icon" href="{% static 'images/favicon.ico' %}">
+    <link rel="stylesheet" href="https://unpkg.com/leaflet/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet/dist/leaflet.js"></script>
+</head>
+
+<body>
+
+    <!-- NAVBAR -->
+    <div class="navbar">
+
+        <div class="nav-left">
+            <span class="logo">Smart Emergency Alert And Response System</span>
+        </div>
+
+        <div class="nav-center">
+            <a href="/" class="nav-link">🏠 Home</a>
+            <a href="/emergency/" class="nav-link">🚨 Emergency</a>
+            <a href="/donors/" class="nav-link">🩸 Donors</a>
+            <a href="/firstaid/" class="nav-link">🩹 First Aid</a>
+        </div>
+
+        <div class="nav-right">
+            {% if user.is_authenticated %}
+            <a href="{% url 'profile' %}" class="nav-link">👤 Profile</a>
+            <a href="{% url 'logout' %}" class="nav-link">🚪 Logout</a>
+            {% else %}
+            <a href="{% url 'login' %}" class="nav-link">🔐 Login</a>
+            <a href="{% url 'register' %}" class="nav-link">📝 Register</a>
+            {% endif %}
+        </div>
+
+    </div>
+
+
+    <!-- HELPING CARD (STICKY) -->
+
+    <div id="helpingCard" style="display:none;">
+
+        🚑 You are helping <b id="helpingName"></b>
+
+        <button onclick="openTracking()" class="trackBtn">
+            📍 Track
+        </button>
+
+        <button onclick="leaveRescue()" class="leaveBtn">
+            Leave
+        </button>
+
+    </div>
+
+
+    <!-- ALERT POPUP -->
+
+    <div id="alertBar" class="alertBar" style="display:none;">
+
+        🚑 <span id="alertVictim"></span> needs help
+
+        <div>
+            📍 Distance: <b id="alertDistance">--</b>
+        </div>
+
+        <div>
+            ⏱ ETA: <b id="alertETA">--</b>
+        </div>
+
+        <button onclick="acceptAlert()">Accept</button>
+        <button onclick="denyAlert()">Deny</button>
+
+    </div>
+
+
+    {% block content %}
+    {% endblock %}
+
+    <div class="features">
+
+        <div class="feature-card">
+            <img src="{% static 'images/emergency.jpg' %}">
+            <h3>Emergency Help</h3>
+            <p>One click call for ambulance & emergency numbers.</p>
+        </div>
+
+        <div class="feature-card">
+            <img src="{% static 'images/donor.jpg' %}">
+            <h3>Blood Donors</h3>
+            <p>Find donors quickly in urgent situations.</p>
+        </div>
+
+        <div class="feature-card">
+            <img src="{% static 'images/firstaid.webp' %}">
+            <h3>First Aid Guide</h3>
+            <p>Instant help steps before doctor arrives.</p>
+        </div>
+
+    </div>
+    <script>
+
+        let currentAlert = null
+        let alertSound = new Audio("/static/sounds/alert.mp3")
+        let alertPlaying = false
+
+        /* CHECK NEARBY ALERTS */
+
+        function checkNearbyAlerts() {
+
+            fetch("/get-nearby-alerts/")
+                .then(res => res.json())
+                .then(data => {
+
+                    let alertBar = document.getElementById("alertBar")
+
+                    if (data.alerts.length > 0) {
+
+                        let alert = data.alerts[0]
+
+                        currentAlert = alert.id
+
+                        document.getElementById("alertVictim").innerText = alert.victim
+
+                        /* ADD THESE */
+
+                        updateAlertDetails(alert)
+                        playAlert()
+
+                        alertBar.style.display = "flex"
+
+                    } else {
+
+                        alertBar.style.display = "none"
+
+                        /* STOP SOUND */
+
+                        stopAlert()
+
+                    }
+
+                })
+
+        }
+
+        function updateAlertDetails(alert) {
+
+            if (document.getElementById("alertDistance")) {
+                document.getElementById("alertDistance").innerText =
+                    alert.distance + " km"
+            }
+
+            if (document.getElementById("alertETA")) {
+                document.getElementById("alertETA").innerText =
+                    alert.eta + " mins"
+            }
+
+        }
+        function playAlert() {
+
+            if (!alertPlaying) {
+
+                alertSound.loop = true
+                alertSound.play().catch(() => { })
+                alertPlaying = true
+
+            }
+
+        }
+
+        function stopAlert() {
+
+            alertSound.pause()
+            alertSound.currentTime = 0
+            alertPlaying = false
+
+        }
+        /* ACCEPT ALERT */
+
+        function acceptAlert() {
+
+            fetch("/accept-rescue/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCSRFToken()
+                },
+                body: JSON.stringify({
+                    alert_id: currentAlert
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+
+                    if (data.status == "accepted") {
+
+                        /* hide alert */
+
+                        document.getElementById("alertBar").style.display = "none"
+
+                        /* show helping card */
+
+                        document.getElementById("helpingCard").style.display = "flex"
+
+                        document.getElementById("helpingName").innerText = data.victim
+
+                    }
+
+                })
+
+        }
+
+
+        /* DENY ALERT */
+
+        function denyAlert() {
+
+            fetch("/deny-rescue/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCSRFToken()
+                },
+                body: JSON.stringify({
+                    alert_id: currentAlert
+                })
+            })
+                .then(res => res.json())
+                .then(data => {
+
+                    document.getElementById("alertBar").style.display = "none"
+
+                })
+
+        }
+
+
+        /* CHECK ACTIVE RESCUE */
+
+        function checkActiveRescue() {
+
+            fetch("/get-active-rescue/")
+                .then(res => res.json())
+                .then(data => {
+
+                    let helpingCard = document.getElementById("helpingCard")
+
+                    if (data.active) {
+
+                        helpingCard.style.display = "flex"
+
+                        document.getElementById("helpingName").innerText = data.victim
+
+                    } else {
+
+                        helpingCard.style.display = "none"
+
+                    }
+
+                })
+
+        }
+
+
+        /* TRACK PAGE */
+
+        function openTracking() {
+
+            window.location.href = "/live-tracking/"
+
+        }
+
+
+        /* LEAVE RESCUE */
+
+        function leaveRescue() {
+
+            fetch("/leave-rescue/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCSRFToken()
+                }
+            })
+                .then(res => res.json())
+                .then(data => {
+
+                    document.getElementById("helpingCard").style.display = "none"
+
+                })
+
+        }
+
+
+        /* CSRF */
+
+        function getCSRFToken() {
+
+            let cookieValue = null
+
+            document.cookie.split(';').forEach(cookie => {
+
+                cookie = cookie.trim()
+
+                if (cookie.startsWith("csrftoken="))
+                    cookieValue = cookie.substring(10)
+
+            })
+
+            return cookieValue
+
+        }
+
+
+        /* AUTO CHECK */
+
+        setInterval(checkNearbyAlerts, 3000)
+
+        setInterval(checkActiveRescue, 3000)
+
+        window.onload = function () {
+
+            checkNearbyAlerts()
+
+            checkActiveRescue()
+
+        }
+
+    </script>
+
+</body>
+
+</html>

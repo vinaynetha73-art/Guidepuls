@@ -1,0 +1,428 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+
+<div class="hero-section">
+    <img src="{% static 'images/banner.png' %}">
+    <div class="hero-text">
+        <h1>Community Health Helper</h1>
+        <p>Emergency • Blood • First Aid — all in one place</p>
+    </div>
+</div>
+
+
+<div class="main-wrapper">
+
+    <div class="home-card">
+
+        <h1>Community Health Helper</h1>
+
+        <p class="subtitle">
+            One platform for emergency help, blood donors and first aid guidance.
+        </p>
+
+        <div class="home-actions">
+
+            <button id="emergencyBtn" onclick="handleEmergency()" class="home-btn btn-emergency">
+                🚨 Emergency
+            </button>
+
+            <a href="/donors/" class="home-btn btn-police">
+                🩸 Find Donors
+            </a>
+
+            <a href="/firstaid/" class="home-btn btn-general">
+                🩹 First Aid Guide
+            </a>
+
+        </div>
+
+        <!-- Helper List -->
+
+        <div id="victimBox" style="display:none;margin-top:20px;">
+
+            <h4 id="helperCount"></h4>
+
+            <div id="helpersBox"></div>
+
+        </div>
+
+    </div>
+</div>
+
+
+<!-- EMERGENCY POPUP -->
+
+
+
+
+
+
+<!-- SAFE POPUP -->
+
+<div id="safePopup" style="
+display:none;
+position:fixed;
+top:30%;
+left:50%;
+transform:translate(-50%,-50%);
+background:white;
+padding:25px;
+border-radius:12px;
+box-shadow:0 0 25px rgba(0,0,0,0.3);
+z-index:9999;
+">
+
+    <h3 id="safeText"></h3>
+
+    <button onclick="confirmSafe()" style="
+background:green;
+color:white;
+border:none;
+padding:6px 15px;
+border-radius:6px;
+">
+
+        OK
+
+    </button>
+
+</div>
+
+
+<script>
+
+    let emergencyActive = false
+    let helpingNow = false
+
+
+
+
+    /* SAVE LIVE LOCATION */
+
+    let watchId = null
+
+    if (navigator.geolocation) {
+
+        watchId = navigator.geolocation.watchPosition(pos => {
+
+            fetch("/save-live-location/", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    "X-CSRFToken": getCSRFToken()
+                },
+                body: JSON.stringify({
+                    latitude: pos.coords.latitude,
+                    longitude: pos.coords.longitude
+                })
+            })
+
+        })
+
+    }
+
+    /* EMERGENCY BUTTON */
+
+    function handleEmergency() {
+
+    if (!emergencyActive) {
+
+        fetch("/trigger-emergency/", {
+            method: "POST",
+            cache: "no-store",
+            headers: { "X-CSRFToken": getCSRFToken() }
+        })
+
+        .then(res => res.json())
+
+        .then(data => {
+
+            emergencyActive = true
+
+            document.getElementById("emergencyBtn").innerText = "🔴 Stop Emergency"
+
+        })
+
+    }
+
+    else {
+
+        fetch("/stop-emergency/", {
+            method: "POST",
+            cache: "no-store",
+            headers: { "X-CSRFToken": getCSRFToken() }
+        })
+
+        .then(res => res.json())
+
+        .then(data => {
+
+            emergencyActive = false
+
+            document.getElementById("emergencyBtn").innerText = "🚨 Emergency"
+
+            // stop location tracking (important for mobile)
+            if (watchId) {
+                navigator.geolocation.clearWatch(watchId)
+                watchId = null
+            }
+
+        })
+
+    }
+
+}
+    /* CHECK MY EMERGENCY */
+
+    function checkMyEmergency() {
+
+        fetch("/check-my-emergency/")
+            .then(res => res.json())
+            .then(data => {
+
+                if (data.active) {
+
+                    emergencyActive = true
+                    document.getElementById("emergencyBtn").innerText = "🔴 Stop Emergency"
+
+                }
+
+            })
+
+    }
+
+
+    /* CHECK ACTIVE RESCUE (Helper already helping aa?) */
+
+    function checkActiveRescue() {
+
+        fetch("/get-active-rescue/")
+            .then(res => res.json())
+            .then(data => {
+
+                if (data.active) {
+
+                    helpingNow = true
+
+                    document.getElementById("helpingCard").style.display = "block"
+                    document.getElementById("helpingName").innerText = data.victim
+
+                }
+
+            })
+
+    }
+
+
+    /* CHECK NEARBY ALERTS */
+
+    function checkNearbyAlerts() {
+
+        if (helpingNow) return
+        if (currentAlert) return
+
+        fetch("/get-nearby-alerts/")
+            .then(res => res.json())
+            .then(data => {
+
+                if (!data.alerts || data.alerts.length === 0) return
+
+                let alert = data.alerts[0]
+
+                currentAlert = alert
+
+                document.getElementById("victimText").innerText =
+                    alert.victim + " needs help 🚨 (" +
+                    alert.distance + " km | ETA " +
+                    alert.eta + " mins)"
+
+                document.getElementById("emergencyPopup").style.display = "block"
+
+                alertSound.play().catch(() => { })
+
+            })
+
+    }
+
+
+    /* ACCEPT RESCUE */
+
+    function acceptRescue() {
+
+        if (!currentAlert) return
+
+        fetch("/accept-rescue/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCSRFToken()
+            },
+            body: JSON.stringify({
+                alert_id: currentAlert.id
+            })
+        })
+            .then(() => {
+
+                helpingNow = true
+
+                closePopup()
+
+                /* show helping card */
+
+                document.getElementById("helpingCard").style.display = "block"
+
+                document.getElementById("helpingName").innerText = currentAlert.victim
+
+            })
+
+    }
+
+    /* DENY RESCUE */
+
+    function denyRescue() {
+
+        if (!currentAlert) return
+
+        fetch("/deny-rescue/", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+                "X-CSRFToken": getCSRFToken()
+            },
+            body: JSON.stringify({
+                alert_id: currentAlert.id
+            })
+        })
+
+        closePopup()
+
+    }
+
+
+    /* CLOSE POPUP */
+
+    function closePopup() {
+
+        alertSound.pause()
+        alertSound.currentTime = 0
+
+        document.getElementById("emergencyPopup").style.display = "none"
+
+        currentAlert = null
+
+    }
+
+
+    /* OPEN TRACKING */
+
+    function openTracking() {
+
+        window.location.href = "/live-tracking/"
+
+    }
+
+
+    /* LEAVE RESCUE */
+
+    function leaveRescue() {
+
+        fetch("/leave-rescue/", {
+            method: "POST",
+            headers: {
+                "X-CSRFToken": getCSRFToken()
+            }
+        })
+            .then(() => {
+
+                helpingNow = false
+
+                document.getElementById("helpingCard").style.display = "none"
+
+            })
+
+    }
+
+
+    /* HELPER LIST (Victim side) */
+
+    function checkHelpers() {
+
+        fetch("/get-active-helpers/")
+            .then(res => res.json())
+            .then(data => {
+
+                let box = document.getElementById("victimBox")
+                let count = document.getElementById("helperCount")
+                let list = document.getElementById("helpersBox")
+
+                if (!data.active) {
+
+                    box.style.display = "none"
+                    return
+
+                }
+
+                box.style.display = "block"
+
+                count.innerText = data.count + "/" + data.max + " Helpers Coming 🚑"
+
+                list.innerHTML = ""
+
+                data.helpers.forEach(h => {
+
+                    list.innerHTML += "<div>• " + h.username + "</div>"
+
+                })
+
+            })
+
+    }
+
+
+    /* SAFE POPUP */
+
+    function showSafePopup(name) {
+
+        document.getElementById("safeText").innerText = name + " is Safe ✅"
+        document.getElementById("safePopup").style.display = "block"
+
+    }
+
+    function confirmSafe() {
+
+        document.getElementById("safePopup").style.display = "none"
+
+    }
+
+
+    /* CSRF */
+
+    function getCSRFToken() {
+
+        let cookieValue = null
+
+        document.cookie.split(';').forEach(cookie => {
+
+            cookie = cookie.trim()
+
+            if (cookie.startsWith("csrftoken="))
+                cookieValue = cookie.substring(10)
+
+        })
+
+        return cookieValue
+
+    }
+
+
+    /* POLLING */
+
+    checkMyEmergency()
+    checkActiveRescue()
+
+    setInterval(checkNearbyAlerts, 7000)
+    setInterval(checkHelpers, 4000)
+
+</script>
+{% endblock %}

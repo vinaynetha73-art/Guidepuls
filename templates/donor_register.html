@@ -1,0 +1,95 @@
+{% extends 'base.html' %}
+{% load static %}
+{% block content %}
+<div class="navbar">
+    <div class="nav-left">
+        <span class="logo">GuidePuls</span>
+    </div>
+
+    <div class="nav-center">
+        <a href="/" class="nav-link">🏠 Home</a>
+        <a href="/emergency/" class="nav-link">🚨 Emergency</a>
+        <a href="/donors/" class="nav-link">🩸 Donors</a>
+        <a href="/firstaid/" class="nav-link">🩹 First Aid</a>
+    </div>
+
+    <!-- 🌗 THEME TOGGLE -->
+    <button onclick="toggleTheme()" class="theme-btn">🌙</button>
+
+    <!-- RIGHT NAV -->
+    <div class="nav-right">
+        {% if user.is_authenticated %}
+            <a href="{% url 'profile' %}" class="nav-link">👤 Profile</a>
+            <a href="{% url 'logout' %}" class="nav-link">🚪 Logout</a>
+        {% else %}
+            <a href="{% url 'login' %}" class="nav-link">🔐 Login</a>
+            <a href="{% url 'register' %}" class="nav-link">📝 Register</a>
+        {% endif %}
+    </div>
+</div>
+
+<div class="donor-form-page">
+
+    <h2>🩸 Register as Blood Donor</h2>
+
+    <form method="POST" class="donor-form">
+        {% csrf_token %}
+
+        <input type="text" name="name" placeholder="Full Name" required>
+        <input type="text" name="place" placeholder="City / Area" required>
+
+        <select name="group" required>
+            <option value="">Select Blood Group</option>
+            <option>A+</option><option>A-</option>
+            <option>B+</option><option>B-</option>
+            <option>AB+</option><option>AB-</option>
+            <option>O+</option><option>O-</option>
+        </select>
+
+        <input type="text" name="phone" placeholder="Mobile Number" required>
+
+        <button type="submit">Register</button>
+    </form>
+
+</div>
+<script>
+    
+/* 🌗 THEME SYSTEM */
+function toggleTheme(){
+    document.body.classList.toggle("light-theme");
+    const themeBtn = document.querySelector(".theme-btn");
+
+    if(document.body.classList.contains("light-theme")){
+        themeBtn.innerText = "🌞";
+        localStorage.setItem("theme","light");
+    } else {
+        themeBtn.innerText = "🌙";
+        localStorage.setItem("theme","dark");
+    }
+}
+
+(function(){
+    if(localStorage.getItem("theme")==="light"){
+        document.body.classList.add("light-theme");
+        document.querySelector(".theme-btn").innerText="🌞";
+    }
+})();
+/* 🔔 TOAST SYSTEM */
+function showToast(msg,type="success"){
+    const box=document.getElementById("toastBox");
+    const t=document.createElement("div");
+    t.className="toast "+type;
+    t.innerText=msg;
+    box.appendChild(t);
+    setTimeout(()=>t.remove(),3000);
+}
+
+/* 🔄 LOADER SYSTEM */
+function showLoader(){
+    document.getElementById("loader").style.display="flex";
+}
+function hideLoader(){
+    document.getElementById("loader").style.display="none";
+}
+</script>
+{% endblock %}

@@ -1,0 +1,240 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block content %}
+
+<link rel="stylesheet" href="{% static 'css/style.css' %}">
+
+<div class="firstaid-container">
+
+<h1 class="firstaid-title">🩺 GuidePuls – First Aid Guide</h1>
+
+<!-- FILTER BAR -->
+<div style="text-align:center;margin-bottom:20px;">
+<select id="categoryFilter" onchange="filterByCategory()" style="padding:10px 14px;border-radius:12px;">
+<option value="all">All Categories</option>
+
+{% for cat in all_categories %}
+<option value="{{ cat }}">{{ cat }}</option>
+{% endfor %}
+
+</select>
+</div>
+
+<!-- SEARCH -->
+<input type="text"
+class="aid-search"
+id="searchInput"
+placeholder="Search first aid..."
+onkeyup="filterCards()">
+
+<!-- CATEGORY BLOCKS -->
+
+{% for category, items in categories.items %}
+
+<h2 class="category-heading" data-category="{{ category }}">
+{{ category }}
+</h2>
+
+<div class="aid-container category-block" data-category="{{ category }}">
+
+{% for aid in items %}
+
+<div class="aid-card"
+onclick="openAidModal('{{ aid.id }}')"
+data-title="{{ aid.title|lower }}">
+
+{{ aid.title }}
+
+<span class="severity {{ aid.severity|lower }}">
+{{ aid.severity }}
+</span>
+
+</div>
+
+{% endfor %}
+
+</div>
+
+{% endfor %}
+
+<!-- BANNERS -->
+
+<div class="firstaid-banners">
+
+<div class="banner red">🚑 Emergency Help</div>
+<div class="banner green">💊 Stay Safe</div>
+<div class="banner blue">🧠 Be Aware</div>
+
+</div>
+
+</div>
+
+
+<!-- MODAL -->
+
+<div class="aid-modal" id="aidModal">
+
+<div class="aid-modal-content">
+
+<span class="close-btn" onclick="closeAidModal()">✖</span>
+
+<h2 id="modalTitle"></h2>
+
+<ul id="modalSteps"></ul>
+
+<div class="aid-actions">
+
+<button id="readBtn"
+class="aid-btn btn-read"
+onclick="toggleSpeech()">
+🔊 Read Steps
+</button>
+
+<button class="aid-btn btn-call">
+🚨 Call Emergency
+</button>
+
+</div>
+
+</div>
+
+</div>
+
+
+<script>
+
+let currentSteps=[]
+
+
+/* OPEN MODAL */
+
+function openAidModal(id){
+
+fetch(`/firstaid/${id}/`)
+.then(res=>res.json())
+.then(data=>{
+
+document.getElementById("modalTitle").innerText=data.title
+
+let stepsList=""
+currentSteps=data.steps
+
+data.steps.forEach(step=>{
+stepsList+=`<li>${step}</li>`
+})
+
+document.getElementById("modalSteps").innerHTML=stepsList
+document.getElementById("aidModal").style.display="flex"
+
+})
+
+}
+
+
+/* CLOSE MODAL */
+
+function closeAidModal(){
+
+speechSynthesis.cancel()
+document.getElementById("aidModal").style.display="none"
+
+}
+
+
+/* SEARCH */
+
+function filterCards(){
+
+let input=document.getElementById("searchInput").value.toLowerCase()
+
+let cards=document.querySelectorAll(".aid-card")
+
+cards.forEach(card=>{
+
+let title=card.getAttribute("data-title")
+
+card.style.display=title.includes(input) ? "block" : "none"
+
+})
+
+}
+
+
+/* CATEGORY FILTER */
+
+function filterByCategory(){
+
+let selected=document.getElementById("categoryFilter").value
+
+let blocks=document.querySelectorAll(".category-block")
+let headings=document.querySelectorAll(".category-heading")
+
+blocks.forEach(block=>{
+
+let cat=block.getAttribute("data-category")
+
+block.style.display=(selected==="all" || cat===selected) ? "grid" : "none"
+
+})
+
+headings.forEach(head=>{
+
+let cat=head.getAttribute("data-category")
+
+head.style.display=(selected==="all" || cat===selected) ? "block" : "none"
+
+})
+
+}
+
+
+/* VOICE READ */
+
+let isSpeaking=false
+let utterance
+
+function toggleSpeech(){
+
+const btn=document.getElementById("readBtn")
+
+if(!isSpeaking){
+
+let stepsText=""
+
+document.querySelectorAll("#modalSteps li").forEach(li=>{
+stepsText+=li.innerText+". "
+})
+
+utterance=new SpeechSynthesisUtterance(stepsText)
+
+speechSynthesis.speak(utterance)
+
+isSpeaking=true
+
+btn.innerText="⏹ Stop Reading"
+
+utterance.onend=()=>{
+
+isSpeaking=false
+btn.innerText="🔊 Read Steps"
+
+}
+
+}
+
+else{
+
+speechSynthesis.cancel()
+
+isSpeaking=false
+
+btn.innerText="🔊 Read Steps"
+
+}
+
+}
+
+</script>
+
+{% endblock %}
