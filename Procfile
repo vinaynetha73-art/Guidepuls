@@ -1,1 +1,1 @@
-web: gunicorn guidepuls.wsgi
+web: python manage.py collectstatic --noinput && gunicorn guidepuls.wsgi
